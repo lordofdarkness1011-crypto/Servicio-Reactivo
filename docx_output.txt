@@ -1,0 +1,117 @@
+Universidad de las Fuerzas Armadas ESPE
+Sede Santo Domingo de los Tsáchilas
+Guía de trabajo del equipo
+Modelo Bloqueante vs. Modelo Reactivo en Spring Boot
+Integración Continua · Pruebas de Integración · Despliegue Continuo
+Con TDD (Red–Green–Refactor) y patrón AAA
+Equipo: Anderson Lara · Juan Jiménez · Molina
+Ingeniería en Tecnologías de la Información
+Contenido
+1. Objetivo del entregable
+El proyecto de comparación entre el modelo bloqueante (Spring MVC + Tomcat + JPA) y el modelo reactivo (Spring WebFlux + Netty + R2DBC) ya está terminado en su parte funcional. Lo que falta es añadir la capa de calidad y automatización: integración continua (CI), pruebas de integración, despliegue continuo (CD) y evidenciar el ciclo Red–Green–Refactor junto con el patrón AAA (Arrange–Act–Assert) en las pruebas.
+Este documento define qué hace cada integrante y qué debe entregar, de modo que Anderson pueda armar el informe en Word y las presentaciones sin tener que perseguir información.
+Reparto de responsabilidades
+Molina → modelo reactivo (WebFlux / Netty / R2DBC)
+Juan Jiménez → modelo bloqueante (Spring MVC / Tomcat / JPA)
+Anderson Lara → redacción del informe, integración de resultados y presentaciones
+2. Conceptos que ambos deben aplicar por igual
+Para que el informe sea comparable, los dos modelos deben documentarse con la misma estructura. Antes de repartir tareas conviene alinear el vocabulario.
+2.1. TDD: Red–Green–Refactor
+Cada funcionalidad probada debe evidenciar el ciclo de tres fases. En el informe se muestra con una captura o fragmento por fase:
+Red (rojo): se escribe primero la prueba, que falla porque la funcionalidad aún no existe o no cumple. Se adjunta la evidencia del test en rojo.
+Green (verde): se implementa el mínimo código necesario para que la prueba pase. Evidencia del test en verde.
+Refactor: se mejora el código (nombres, duplicación, estructura) manteniendo las pruebas en verde. Se explica qué se refactorizó y por qué.
+2.2. Patrón AAA (Arrange–Act–Assert)
+Toda prueba debe estar estructurada visiblemente en tres bloques, idealmente separados con comentarios:
+Arrange: preparar datos, mocks, cliente HTTP, estado inicial.
+Act: ejecutar la acción bajo prueba (la llamada al endpoint o al servicio).
+Assert: verificar el resultado esperado (status, cuerpo, número de elementos, tiempo, etc.).
+Ejemplo mínimo del patrón AAA (a incluir en cada modelo)
+// Arrange
+var request = new ProductoDTO("Teclado", 25.0);
+// Act
+var response = webTestClient.post().uri("/productos").bodyValue(request).exchange();
+// Assert
+response.expectStatus().isCreated();
+2.3. Definiciones de la parte de automatización
+Concepto
+Qué se espera evidenciar
+Integración Continua (CI)
+Un pipeline que, ante cada push/PR, compila y ejecuta las pruebas automáticamente. Evidencia: archivo de workflow + ejecución en verde.
+Pruebas de integración
+Pruebas que levantan el contexto de Spring y validan el endpoint contra una base de datos real (o Testcontainers), no solo unitarias.
+Despliegue Continuo (CD)
+Que al pasar CI, la aplicación se empaquete y despliegue automáticamente (imagen Docker, Render/Railway, etc.). Evidencia: pipeline de deploy + URL o contenedor corriendo.
+3. Juan Jiménez — Modelo Bloqueante
+Stack: Spring MVC + Tomcat + Spring Data JPA. Es el modelo que satura hilos (hasta 224) y colapsa alrededor de los 500 usuarios concurrentes; ese comportamiento es parte del resultado a documentar.
+3.1. Qué debe hacer
+Pruebas de integración con AAA. Crear pruebas con @SpringBootTest + MockMvc (o TestRestTemplate) que levanten el contexto y validen los endpoints principales contra la base de datos (usar Testcontainers o H2). Cada test estructurado en Arrange–Act–Assert.
+Ciclo Red–Green–Refactor documentado. Elegir al menos 2 funcionalidades (por ejemplo, crear y listar) y capturar las tres fases: test en rojo, implementación mínima en verde, y una refactorización con las pruebas aún en verde.
+Integración continua. Configurar un workflow (GitHub Actions) que ejecute mvn -B verify en cada push. Debe correr las pruebas de integración del modelo bloqueante y quedar en verde.
+Despliegue continuo. Dockerizar el servicio bloqueante y configurar el job de deploy (imagen a registry, o despliegue a Render/Railway) que se dispare tras un CI exitoso.
+Prueba de carga (evidencia del colapso). Ejecutar una prueba de concurrencia (JMeter, k6 o Gatling) subiendo usuarios hasta ~500 y registrar cómo se saturan los hilos y sube la latencia. Esto alimenta la comparación.
+3.2. Qué debe entregar a Anderson
+Código y tests en el repositorio, en su rama/carpeta del modelo bloqueante.
+Capturas Red–Green–Refactor (una por fase, por cada funcionalidad) nombradas claramente, p. ej. bloqueante_crear_red.png.
+Archivo del workflow de CI/CD (.github/workflows/*.yml) y captura de la ejecución en verde en GitHub Actions.
+Evidencia del despliegue: captura del contenedor/servicio corriendo o URL activa.
+Resultados de la prueba de carga: tabla o gráfico con usuarios concurrentes vs. latencia / hilos / throughput, más el CSV crudo.
+Redacción breve (media página): explicación de sus tests, qué refactorizó y qué observó en la carga.
+Formato pedido a Juan para que Anderson no reprocese
+• Imágenes en PNG, mínimo 1200 px de ancho, legibles.
+• Tablas de resultados en un mismo .xlsx o .csv (columnas: usuarios, latencia_ms, throughput, hilos, errores).
+• Texto en un .docx o .md aparte, en español, sin capturas incrustadas (las capturas van sueltas).
+4. Molina — Modelo Reactivo
+Stack: Spring WebFlux + Netty + R2DBC. Trabaja con ~12 hilos constantes bajo la misma carga. El punto experimental central son las estrategias de backpressure (none, limitRate, buffer, drop/latest), que deben quedar bien evidenciadas.
+4.1. Qué debe hacer
+Pruebas de integración con AAA. Usar @SpringBootTest + WebTestClient contra los endpoints reactivos, validando Flux/Mono (con StepVerifier cuando se prueba el flujo). Cada test en Arrange–Act–Assert.
+Ciclo Red–Green–Refactor documentado. Sobre las mismas 2 funcionalidades que Juan (crear y listar) para que la comparación sea justa: rojo, verde y refactor con evidencia.
+Estrategias de backpressure. Implementar y probar las variantes (none, limitRate, buffer, drop/latest) y registrar cómo se comporta cada una bajo carga. Este es el aporte diferenciador del modelo reactivo.
+Integración continua. Workflow (GitHub Actions) que ejecute mvn -B verify del módulo reactivo en cada push, en verde.
+Despliegue continuo. Dockerizar el servicio reactivo y configurar el deploy automático tras CI exitoso, igual que el bloqueante para poder compararlos.
+Prueba de carga equivalente. Misma prueba de concurrencia hasta ~500 usuarios que Juan, con la misma herramienta y parámetros, para que los números sean comparables. Repetir por cada estrategia de backpressure.
+4.2. Qué debe entregar a Anderson
+Código y tests en su rama/carpeta del modelo reactivo.
+Capturas Red–Green–Refactor por funcionalidad, nombradas p. ej. reactivo_listar_green.png.
+Tabla comparativa de backpressure: estrategia vs. latencia / throughput / memoria / errores.
+Archivo del workflow de CI/CD y captura de la ejecución en verde.
+Evidencia del despliegue (contenedor o URL).
+Resultados de carga en el mismo formato de columnas que Juan, más un campo extra estrategia_backpressure.
+Redacción breve (media página): explicación de sus tests, refactor y hallazgos de backpressure.
+Clave para la comparación
+Molina y Juan deben usar la MISMA herramienta de carga, los MISMOS niveles de usuarios y el MISMO formato de tabla.
+Sin eso, Anderson no puede poner los dos modelos lado a lado en el informe.
+5. Anderson Lara — Informe y presentaciones
+Con los entregables de ambos, Anderson consolida. Su trabajo será mucho más rápido si los dos entregan en el formato pedido.
+5.1. Tareas de Anderson
+Informe en Word: introducción, marco (bloqueante vs. reactivo, CI/CD, TDD, AAA), metodología, resultados comparados, discusión y conclusiones.
+Sección de resultados: tablas y gráficos unificados con los datos de carga de ambos modelos y las estrategias de backpressure.
+Presentación: versión resumida con las gráficas comparativas y las evidencias Red–Green–Refactor más representativas.
+5.2. Checklist antes de cerrar el informe
+¿Están las 3 fases (rojo/verde/refactor) de ambos modelos?
+¿Hay evidencia de CI en verde y de CD funcionando para los dos?
+¿Las tablas de carga usan las mismas columnas y niveles de usuarios?
+¿Se explican las 4 estrategias de backpressure con datos?
+¿Cada prueba mostrada respeta el patrón AAA?
+6. Orden sugerido de trabajo
+Fase
+Actividad
+Responsable
+1
+Acordar funcionalidades a probar, herramienta de carga y formato de tablas
+Los tres
+2
+Escribir pruebas de integración (AAA) y ciclo Red–Green–Refactor
+Juan (bloqueante) / Molina (reactivo)
+3
+Configurar CI (GitHub Actions) en verde
+Juan / Molina
+4
+Dockerizar y configurar CD
+Juan / Molina
+5
+Pruebas de carga y recolección de datos
+Juan / Molina
+6
+Consolidar informe Word y presentaciones
+Anderson
