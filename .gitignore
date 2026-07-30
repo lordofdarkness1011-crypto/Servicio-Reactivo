@@ -36,4 +36,4 @@ build/
 *.docx
 *.py
 *.txt
-walkthrough.md
+*.md
